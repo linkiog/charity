@@ -26,6 +26,10 @@ func JWTAuth(secret string) gin.HandlerFunc {
 		}
 		claims := token.Claims.(jwt.MapClaims)
 		ctx.Set("user_id", uint(claims["user_id"].(float64)))
+		ctx.Set("role", claims["role"].(string))
+		if mid, ok := claims["mosque_id"]; ok {
+			ctx.Set("mosque_id", uint(mid.(float64)))
+		}
 		ctx.Next()
 	}
 }

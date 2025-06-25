@@ -16,9 +16,10 @@ func New(cfg *config.Config) *gorm.DB {
 	}
 	if err := db.AutoMigrate(
 		&models.User{},
+		&models.Mosque{},
+		&models.Product{},
 	); err != nil {
 		log.Fatalf(" auto migrate failed %v", err)
 	}
 	return db
-
 }
