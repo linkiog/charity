@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -39,7 +40,16 @@ func NewProductHandler(db *gorm.DB) *ProductHandler {
 
 func (h *ProductHandler) Buy(c *gin.Context) {
 
-	id, _ := strconv.Atoi(c.Param("productID"))
+	mosqueID, err := strconv.ParseUint(c.Param("mosqueID"), 10, 64)
+	if err != nil || mosqueID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid mosque id"})
+		return
+	}
+	productID, err := strconv.ParseUint(c.Param("productID"), 10, 64)
+	if err != nil || productID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid product id"})
+		return
+	}
 
 	var req struct {
 		Qty int `json:"qty" binding:"required,min=1"`
@@ -49,33 +59,43 @@ func (h *ProductHandler) Buy(c *gin.Context) {
 		return
 	}
 
-	var prod models.Product
-	if err := h.DB.Clauses(clause.Locking{Strength: "UPDATE"}).First(&prod, id).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "product not found"})
-		return
-	}
-
-	if prod.Purchased+req.Qty > prod.Need {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "exceeds required amount"})
-		return
-	}
 	uid := c.GetUint("user_id")
 
-	don := models.Donation{
-		ProductID: uint(id),
-		Qty:       req.Qty,
-		Amount:    prod.Price * float64(req.Qty),
-	}
-	if uid != 0 {
-		don.UserID = uid
-	}
-	if err := h.DB.Create(&don).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot save donation"})
-		return
-	}
+	if err := h.DB.Transaction(func(tx *gorm.DB) error {
+		var prod models.Product
 
-	if err := h.DB.Model(&prod).UpdateColumn("purchased", gorm.Expr("purchased + ?", req.Qty)).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot update purchased"})
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND mosque_id = ?", productID, mosqueID).
+			First(&prod).Error; err != nil {
+			return fmt.Errorf("product not found")
+		}
+
+		if prod.Purchased+req.Qty > prod.Need {
+			return fmt.Errorf("exceeds required amount")
+		}
+
+		don := models.Donation{
+			ProductID: uint(productID),
+			Qty:       req.Qty,
+			Amount:    prod.Price * float64(req.Qty),
+		}
+		if uid != 0 {
+			don.UserID = uid
+		}
+		if err := tx.Create(&don).Error; err != nil {
+			fmt.Printf("cannot save donation %v", err)
+			return fmt.Errorf("cannot save donation")
+		}
+
+		if err := tx.Model(&prod).
+			UpdateColumn("purchased", gorm.Expr("purchased + ?", req.Qty)).
+			Error; err != nil {
+			return fmt.Errorf("cannot update purchased")
+		}
+
+		return nil
+	}); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 

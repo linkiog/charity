@@ -29,7 +29,7 @@ func Handler(cfg *config.Config, gorm *gorm.DB, r *gin.Engine) {
 	{
 		mosqSA.POST("", mosqH.Create)
 		// mosqSA.PUT("/:id", mosqH.Update)
-		// mosqSA.PUT("/:id/admin", mosqH.SetAdmin)
+		// mosqSA.PUT("/:id	/admin", mosqH.SetAdmin)
 		// mosqSA.DELETE("/:id", mosqH.Delete)
 	}
 
@@ -42,8 +42,7 @@ func Handler(cfg *config.Config, gorm *gorm.DB, r *gin.Engine) {
 		mosq.GET("", mosqH.GetWithProducts)
 		//mosq.GET("/products", prodH.ListByMosque)
 		mosq.POST("/products", prodH.CreateForMosque)
+		mosq.POST("/:productID/buy", prodH.Buy)
 	}
-
-	auth.POST("/products/:productID/buy", middleware.RoleAuth(models.RoleSuperAdmin, models.RoleAdmin, models.RoleUser), prodH.Buy)
 
 }
